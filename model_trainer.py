@@ -4,9 +4,8 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.optimizers import Adam
 
 IMG_SIZE = 28
-BATCH_SIZE = 8  # Good for small dataset
+BATCH_SIZE = 8  
 
-# Apply data augmentation
 datagen = ImageDataGenerator(
     rescale=1./255,
     rotation_range=15,
@@ -19,7 +18,7 @@ datagen = ImageDataGenerator(
 train_data = datagen.flow_from_directory(
     'dataset',
     target_size=(28, 28),
-    color_mode='grayscale',  # ← This goes here
+    color_mode='grayscale',
     batch_size=8,
     class_mode='sparse',
     subset='training',
@@ -29,13 +28,12 @@ train_data = datagen.flow_from_directory(
 val_data = datagen.flow_from_directory(
     'dataset',
     target_size=(28, 28),
-    color_mode='grayscale',  # ← And here too
+    color_mode='grayscale',
     batch_size=8,
     class_mode='sparse',
     subset='validation'
 )
 
-# Define CNN
 model = Sequential([
     Conv2D(16, (3,3), activation='relu', input_shape=(IMG_SIZE, IMG_SIZE, 1)),
     MaxPooling2D(),
@@ -48,8 +46,6 @@ model = Sequential([
 
 model.compile(optimizer=Adam(), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-# Train longer due to small dataset
 model.fit(train_data, validation_data=val_data, epochs=40)
 
-# Save for TF.js conversion
 model.save("model.h5")
