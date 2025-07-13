@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick, Draw! (Pisay Edition)</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      background: black;
+      touch-action: none;
+    }
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 1rem;
+    }
+    #game-container, #end-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="prompt"></h1>
+
+  <div id="game-container">
+    <canvas id="canvas" width="280" height="280"></canvas>
+    <p id="timer">Time left: </p>
+    <p id="result"></p>
+    <button onclick="clearCanvas()">CLEAR</button>
+  </div>
+
+  <div id="end-screen">
+    <h2>GAME OVER!</h2>
+    <p id="final-score"></p>
+    <button onclick="startGame()">NEW GAME</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    let drawing = false;
+    let prompts = [];
+    let currentIndex = 0;
+    let score = 0;
+    let timeLeft = 15;
+    let timerInterval;
+
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    function startGame() {
+      fetch("/get_prompt", { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+          prompts = data.prompts;
+          currentIndex = 0;
+          score = 0;
+          document.getElementById("end-screen").style.display = "none";
+          document.getElementById("game-container").style.display = "flex";
+          startRound();
+        });
+    }
+
+    function startRound() {
+      clearCanvas();
+      if (currentIndex >= prompts.length) return endGame();
+      document.getElementById("prompt").innerText = `Draw: ${prompts[currentIndex]}`;
+      timeLeft = 15;
+      document.getElementById("timer").innerText = `Time left: ${timeLeft}s`;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById("timer").innerText = `Time left: ${timeLeft}s`;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          submitDrawing();
+        }
+      }, 1000);
+    }
+
+    function clearCanvas() {
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      document.getElementById("result").innerText = "";
+    }
+
+    function submitDrawing() {
+      const imageData = canvas.toDataURL("image/png");
+      fetch("/predict", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData, expected_class: prompts[currentIndex] })
+      })
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("result").innerText = data.result;
+        if (data.correct) score++;
+        currentIndex++;
+        setTimeout(startRound, 3000);
+      });
+    }
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
+        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top
+      };
+    }
+
+    canvas.addEventListener("mousedown", () => drawing = true);
+    canvas.addEventListener("mouseup", () => drawing = false);
+    canvas.addEventListener("mousemove", e => {
+      if (!drawing) return;
+      const pos = getPos(e);
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    canvas.addEventListener("touchstart", e => {
+      drawing = true;
+      e.preventDefault();
+    });
+    canvas.addEventListener("touchend", () => drawing = false);
+    canvas.addEventListener("touchmove", e => {
+      if (!drawing) return;
+      const pos = getPos(e);
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      e.preventDefault();
+    });
+
+    function endGame() {
+      document.getElementById("game-container").style.display = "none";
+      document.getElementById("end-screen").style.display = "flex";
+      document.getElementById("final-score").innerText = `You scored ${score} out of ${prompts.length}!`;
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
