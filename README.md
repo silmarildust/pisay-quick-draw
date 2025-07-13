@@ -16,4 +16,4 @@ Note: This file probably won't be updated with new settings as it will be done o
 3. While running, go to http://[your laptop IP address]:7272 on your **iPad** or other device.
 4. Only terminate the program when done.
 
-Note: do not share the port "7272" with anyone. Obviously don't share your IP either.
+Note: Do not share your IP with anyone.
