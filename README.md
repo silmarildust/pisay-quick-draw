@@ -3,12 +3,14 @@ For Tomorrow Club's club fair booth 2025.
 
 ## instructions
 ### to test model:
-Run model_tester.py.
+1. Run model_tester.py.
+2. Exit the image viewer window. The prediction will then be outputted in the terminal.
 
 Note: Make sure to change the file name for which image to be tested. Feel free to test own images (upload under test\ folder).
 
 ### to run the game on laptop:
-Run quick_draw_game.py. 
+1. Run quick_draw_game.py.
+2. Click "NEW GAME" to reset (only appears after four rounds).
 
 Note: This file probably won't be updated with new settings as it will be done on the iPad version.
 
