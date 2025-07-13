@@ -54,4 +54,4 @@ def predict():
     return jsonify({"result": result, "correct": correct})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=7272, debug=True) #DO NOT SHARE THIS PORT WITH ANYONE THANK U VERY MUCH
+    app.run(host='0.0.0.0', port=7272, debug=True)
