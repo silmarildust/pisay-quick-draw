@@ -1,160 +1,57 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quick, Draw! (Pisay Edition)</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: #111;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      overflow: hidden;
-    }
-    canvas {
-      background: black;
-      touch-action: none;
-    }
-    button {
-      margin: 10px;
-      padding: 10px 20px;
-      font-size: 1rem;
-    }
-    #game-container, #end-screen {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-    }
-  </style>
-</head>
-<body>
-  <h1 id="prompt"></h1>
+from flask import Flask, render_template, request, jsonify
+import numpy as np
+import tensorflow as tf
+import base64
+import re
+from PIL import Image
+import io
+import random
 
-  <div id="game-container">
-    <canvas id="canvas" width="280" height="280"></canvas>
-    <p id="timer">Time left: </p>
-    <p id="result"></p>
-    <button onclick="clearCanvas()">CLEAR</button>
-  </div>
+app = Flask(__name__)
 
-  <div id="end-screen">
-    <h2>GAME OVER!</h2>
-    <p id="final-score"></p>
-    <button onclick="startGame()">NEW GAME</button>
-  </div>
+import os
+model_path = os.path.join(os.path.dirname(__file__), "model_final.h5")
+model = tf.keras.models.load_model(model_path)
 
-  <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    let drawing = false;
-    let prompts = [];
-    let currentIndex = 0;
-    let score = 0;
-    let timeLeft = 15;
-    let timerInterval;
+class_names = ['gazebo', 'kalachuchi', 'Siklab', 'Tomorrow logo']
 
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-    function startGame() {
-      fetch("/get_prompt", { method: "POST" })
-        .then(res => res.json())
-        .then(data => {
-          prompts = data.prompts;
-          currentIndex = 0;
-          score = 0;
-          document.getElementById("end-screen").style.display = "none";
-          document.getElementById("game-container").style.display = "flex";
-          startRound();
-        });
-    }
+@app.route('/get_prompt', methods=['POST'])
+def get_prompt():
+    prompts = random.sample(class_names, len(class_names))
+    return jsonify({"prompts": prompts})
 
-    function startRound() {
-      clearCanvas();
-      if (currentIndex >= prompts.length) return endGame();
-      document.getElementById("prompt").innerText = `Draw: ${prompts[currentIndex]}`;
-      timeLeft = 15;
-      document.getElementById("timer").innerText = `Time left: ${timeLeft}s`;
-      clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        timeLeft--;
-        document.getElementById("timer").innerText = `Time left: ${timeLeft}s`;
-        if (timeLeft <= 0) {
-          clearInterval(timerInterval);
-          submitDrawing();
-        }
-      }, 1000);
-    }
+@app.route('/predict', methods=['POST'])
+def predict():
+    data = request.json['image']
+    expected_class = request.json['expected_class']
+    data = re.sub('^data:image/.+;base64,', '', data)
+    image_bytes = base64.b64decode(data)
+    image = Image.open(io.BytesIO(image_bytes)).convert('L')
+    image = image.resize((28, 28))
+    img_array = np.array(image).astype("float32") / 255.0
+    img_array = np.expand_dims(img_array, axis=(0, -1))
 
-    function clearCanvas() {
-      ctx.fillStyle = "black";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      document.getElementById("result").innerText = "";
-    }
+    prediction = model.predict(img_array)[0]
+    predicted_index = np.argmax(prediction)
+    predicted_class = class_names[predicted_index]
+    confidence = float(prediction[predicted_index])
 
-    function submitDrawing() {
-      const imageData = canvas.toDataURL("image/png");
-      fetch("/predict", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData, expected_class: prompts[currentIndex] })
-      })
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById("result").innerText = data.result;
-        if (data.correct) score++;
-        currentIndex++;
-        setTimeout(startRound, 3000);
-      });
-    }
+    if confidence >= 0.95:
+        if predicted_class == expected_class:
+            result = f"The AI guessed: {predicted_class} ({confidence*100:.1f}%)\nCorrect!"
+            correct = True
+        else:
+            result = f"The AI guessed: {predicted_class} ({confidence*100:.1f}%)\nWrong!"
+            correct = False
+    else:
+        result = "The AI doesn't know what you're drawing..."
+        correct = False
 
-    function getPos(e) {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
-        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top
-      };
-    }
+    return jsonify({"result": result, "correct": correct})
 
-    canvas.addEventListener("mousedown", () => drawing = true);
-    canvas.addEventListener("mouseup", () => drawing = false);
-    canvas.addEventListener("mousemove", e => {
-      if (!drawing) return;
-      const pos = getPos(e);
-      ctx.fillStyle = "white";
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    canvas.addEventListener("touchstart", e => {
-      drawing = true;
-      e.preventDefault();
-    });
-    canvas.addEventListener("touchend", () => drawing = false);
-    canvas.addEventListener("touchmove", e => {
-      if (!drawing) return;
-      const pos = getPos(e);
-      ctx.fillStyle = "white";
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-      e.preventDefault();
-    });
-
-    function endGame() {
-      document.getElementById("game-container").style.display = "none";
-      document.getElementById("end-screen").style.display = "flex";
-      document.getElementById("final-score").innerText = `You scored ${score} out of ${prompts.length}!`;
-    }
-
-    startGame();
-  </script>
-</body>
-</html>
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=7272, debug=True)
